@@ -1,3 +1,6 @@
+# Local installers and large binaries
+*.exe
+*.msi
 X-AnyLabeling-v4.0.0-beta.5-CPU.exe
 
 # YOLO output directories
@@ -20,12 +23,27 @@ __pycache__/
 # Downloaded/trained model weights
 *.pt
 *.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.engine
+*.weights
+*.h5
+*.pkl
+*.joblib
+*.npy
+*.npz
 
 # Transfer bundles and archives
 *.zip
 *.tar
 *.tar.gz
+*.tar.bz2
+*.tar.xz
 *.tgz
+*.gz
+*.bz2
+*.xz
 *.rar
 *.7z
 
