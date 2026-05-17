@@ -1,0 +1,6 @@
+experiment,task,model_or_run,split,best_epoch,precision,recall,map50,map50_95,note
+big_data_yolo,amount,lcdtc_0123_yolo11m_1024_b40_fixed,val,90,0.809,0.752,0.811,0.757,LCDTC plus bottleDataset YOLO11m-OBB four-class
+big_data_yolo,class_none,lcdtc_0123_yolo11m_1024_b40_fixed,val,90,0.835,0.801,0.851,0.765,class 0 none
+big_data_yolo,class_little,lcdtc_0123_yolo11m_1024_b40_fixed,val,90,0.803,0.756,0.820,0.778,class 1 little
+big_data_yolo,class_mid,lcdtc_0123_yolo11m_1024_b40_fixed,val,90,0.732,0.655,0.702,0.666,class 2 mid
+big_data_yolo,class_much,lcdtc_0123_yolo11m_1024_b40_fixed,val,90,0.863,0.796,0.873,0.817,class 3 much

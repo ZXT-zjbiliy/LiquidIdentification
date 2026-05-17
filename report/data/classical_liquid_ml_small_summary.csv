@@ -1,0 +1,7 @@
+task,model,split,accuracy,accuracy_percent,status,output_dir
+amount,decision-tree,val,0.2727272727,27.27%,ok,/mnt/data/zxt/LiquidIdentification/runs/classical_liquid_ml_small/amount/decision-tree
+amount,random-forest,val,0.4545454545,45.45%,ok,/mnt/data/zxt/LiquidIdentification/runs/classical_liquid_ml_small/amount/random-forest
+amount,gradient-boosting,val,0.4090909091,40.91%,ok,/mnt/data/zxt/LiquidIdentification/runs/classical_liquid_ml_small/amount/gradient-boosting
+amount,knn,val,0.2272727273,22.73%,ok,/mnt/data/zxt/LiquidIdentification/runs/classical_liquid_ml_small/amount/knn
+amount,svm,val,0.5454545455,54.55%,ok,/mnt/data/zxt/LiquidIdentification/runs/classical_liquid_ml_small/amount/svm
+amount,xgboost,val,0.5000000000,50.00%,ok,/mnt/data/zxt/LiquidIdentification/runs/classical_liquid_ml_small/amount/xgboost

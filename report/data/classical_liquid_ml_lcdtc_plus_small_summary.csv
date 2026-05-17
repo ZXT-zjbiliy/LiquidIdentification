@@ -1,0 +1,13 @@
+task,model,split,accuracy,accuracy_percent,status,output_dir
+binary,decision-tree,val,0.7588947767,75.89%,ok,/mnt/data/zxt/LiquidIdentification/runs/classical_liquid_ml_lcdtc_plus_small/binary/decision-tree
+binary,random-forest,val,0.8421650265,84.22%,ok,/mnt/data/zxt/LiquidIdentification/runs/classical_liquid_ml_lcdtc_plus_small/binary/random-forest
+binary,gradient-boosting,val,0.8599545799,86.00%,ok,/mnt/data/zxt/LiquidIdentification/runs/classical_liquid_ml_lcdtc_plus_small/binary/gradient-boosting
+binary,knn,val,0.8610900833,86.11%,ok,/mnt/data/zxt/LiquidIdentification/runs/classical_liquid_ml_lcdtc_plus_small/binary/knn
+binary,svm,val,0.8732021196,87.32%,ok,/mnt/data/zxt/LiquidIdentification/runs/classical_liquid_ml_lcdtc_plus_small/binary/svm
+binary,xgboost,val,0.8762301287,87.62%,ok,/mnt/data/zxt/LiquidIdentification/runs/classical_liquid_ml_lcdtc_plus_small/binary/xgboost
+amount,decision-tree,val,0.3591975776,35.92%,ok,/mnt/data/zxt/LiquidIdentification/runs/classical_liquid_ml_lcdtc_plus_small/amount/decision-tree
+amount,random-forest,val,0.5688872067,56.89%,ok,/mnt/data/zxt/LiquidIdentification/runs/classical_liquid_ml_lcdtc_plus_small/amount/random-forest
+amount,gradient-boosting,val,0.6790310371,67.90%,ok,/mnt/data/zxt/LiquidIdentification/runs/classical_liquid_ml_lcdtc_plus_small/amount/gradient-boosting
+amount,knn,val,0.6233913702,62.34%,ok,/mnt/data/zxt/LiquidIdentification/runs/classical_liquid_ml_lcdtc_plus_small/amount/knn
+amount,svm,val,0.6502649508,65.03%,ok,/mnt/data/zxt/LiquidIdentification/runs/classical_liquid_ml_lcdtc_plus_small/amount/svm
+amount,xgboost,val,0.6790310371,67.90%,ok,/mnt/data/zxt/LiquidIdentification/runs/classical_liquid_ml_lcdtc_plus_small/amount/xgboost
