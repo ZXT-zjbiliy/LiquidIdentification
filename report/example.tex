@@ -15,7 +15,7 @@
 \usepackage{enumitem}
 \usepackage{float}
 
-\title{待定}
+\title{基于YOLO-OBB与传统机器学习的透明饮料瓶残留液体识别}
 \tihao{A}
 \baominghao{<报名号>}
 \schoolname{<学校名>}
@@ -25,7 +25,7 @@
 \supervisor{<指导教师>}
 \yearinput{2026}
 \monthinput{05}
-\dayinput{<日期>}
+\dayinput{17}
 
 \begin{document}
 \maketitle
@@ -33,7 +33,7 @@
 \begin{abstract}
 针对透明塑料饮料瓶残留液体自动识别问题，本文构建了218张多姿态、多液种的自建数据集，并引入公开LCDTC数据集以增强模型泛化能力。在仅依靠自建数据的小样本条件下，提出一种“YOLO11m-OBB旋转定位+传统机器学习分级”的两阶段方法：旋转框紧密贴合倾斜瓶体，随后在瓶体裁剪区域提取水线、颜色、纹理、梯度和频域等247维特征，比较决策树、随机森林、梯度提升、KNN、SVM与XGBoost等分类器。实验显示，小样本四分类任务中RBF-SVM验证准确率最高，为54.55\%；当引入LCDTC后，传统机器学习二分类最佳准确率提升至87.62\%，四分类最佳准确率提升至67.90\%。在大样本端到端方案中，合并自建与LCDTC数据训练YOLO11m-OBB四分类检测器，mAP@0.5达0.811，mAP@0.5:0.95达0.757。两类方法分别体现了小样本可解释建模与大样本端到端检测的特点，为饮料瓶自动分拣提供了可比较的技术路线。
 
-\keywords{液体识别\quad YOLO11m-OBB\quad 可解释特征\quad 消融实验\quad 旋转目标检测\quad 两阶段方法}
+\keywords{液体识别\quad YOLO11m-OBB\quad 传统机器学习\quad 旋转目标检测\quad 数据扩充\quad 两阶段方法}
 \end{abstract}
 
 \section{问题重述}
@@ -83,7 +83,7 @@
 
 \section{数据集构建与格式转换}
 \subsection{自建 BottleDataset 数据集}
-自建数据集 $D_{\text{self}}$ 包含218张有效图片，来源包括手机拍摄、公开无版权图片及少量网络资源，均记录出处。瓶型覆盖12种常见品牌，容量从250 mL至2 L不等；液体涵盖清水、茶水、橙汁、可乐、牛奶等8类；姿态包含竖立、横放、倾斜、倒放各不少于40张；背景覆盖室内桌面、手持、户外草地、瓷砖等多样环境。使用YOLO OBB格式标注瓶体旋转矩形，坐标归一化至$[0,1]$：
+自建数据集 $D_{\text{self}}$ 包含218张有效图片，来源包括手机拍摄、公开无版权图片及少量网络资源，均记录出处。数据覆盖多种常见瓶型、不同容量、不同液体颜色与多样拍摄姿态，背景包括室内桌面、手持、户外和地面场景。使用YOLO OBB格式标注瓶体旋转矩形，坐标归一化至$[0,1]$：
 \[
 \text{class}\quad x_1\quad y_1\quad x_2\quad y_2\quad x_3\quad y_3\quad x_4\quad y_4 .
 \]
@@ -113,7 +113,7 @@
 \section{方法一：小样本下YOLO定位与传统机器学习分类}
 本方法完全基于自建的218张图像，旨在标注资源有限时兼顾检测精度与决策可解释性。
 \subsection{YOLO-OBB瓶体定位}
-采用YOLO11m-OBB旋转目标检测架构，其检测头同时预测旋转框的中心、宽高、角度以及类别分数。相比水平框，旋转框能更紧凑地包围倾斜或横放的瓶体，显著减少背景像素的引入，为后续特征提取提供更纯净的掩膜区域。模型以预训练权重 \texttt{yolo11m-obb.pt} 初始化，在 $D_{\text{self}}$ 训练集上微调，输入尺寸 $1024\times1024$，批大小40，最大训练周期800，并启用早停策略。训练过程中加入 $\pm10^\circ$ 随机旋转和0.1比例平移增强，以提高模型对瓶体姿态变化的适应能力。
+采用YOLO11m-OBB旋转目标检测架构，其检测头同时预测旋转框的中心、宽高、角度以及类别分数。相比水平框，旋转框能更紧凑地包围倾斜或横放的瓶体，显著减少背景像素的引入，为后续特征提取提供更纯净的瓶体裁剪区域。本文的小样本二分类定位基线使用 \texttt{bottle\_01\_yolo11m\_640\_b4} 训练结果，输入尺寸为 $640\times640$，批大小4；小样本四分类传统机器学习实验则基于标注旋转框裁剪瓶体区域并提取特征。训练过程中加入随机旋转和平移增强，以提高模型对瓶体姿态变化的适应能力。
 
 \subsection{特征提取}
 受人类观察透明瓶内液体的视觉习惯启发，在YOLO或人工标注得到的瓶体旋转框内裁剪瓶体区域，并统一缩放至 $128\times64$。特征提取分为轻量版与完整版本，本文传统机器学习实验采用完整特征集，共得到247维特征。特征计算封装在 \texttt{scripts/liquid\_level\_features.py} 中，主要包括以下几类：
@@ -152,7 +152,7 @@
 本地数据处理、可视化与论文整理在 Windows 11 + WSL2 Ubuntu 环境下完成；主要YOLO训练在 ziplab-5090 服务器上完成，使用2张 NVIDIA RTX 5090 显卡（编号0和4）。训练脚本基于 Python、PyTorch、Ultralytics、scikit-learn 与 OpenCV 实现。为确保可复现，数据划分与传统机器学习实验固定随机种子。
 
 \subsection{评价指标}
-目标检测部分采用 mAP@0.5、mAP@0.5:0.95、精确率 $P$ 和召回率 $R$；分类任务报告准确率（Accuracy）、宏平均F1分数（Macro-F1）以及各类别的精确率/召回率/F1。二分类任务额外关注F1-Confidence曲线、PR曲线以及混淆矩阵，以全面评估模型在不同置信度阈值下的行为。四分类任务同样绘制归一化混淆矩阵，分析类别间混淆模式。所有指标均基于自建测试集的21张图像（单瓶体）进行公平比较。
+目标检测部分采用 mAP@0.5、mAP@0.5:0.95、精确率 $P$ 和召回率 $R$；分类任务报告准确率（Accuracy）、宏平均F1分数（Macro-F1）以及各类别的精确率/召回率/F1。二分类任务额外关注F1-Confidence曲线、PR曲线以及混淆矩阵，以全面评估模型在不同置信度阈值下的行为。四分类任务同样绘制归一化混淆矩阵，分析类别间混淆模式。传统机器学习结果按对应特征表的验证集统计，YOLO检测结果按相应训练运行的验证集统计，具体汇总文件保存在 \texttt{report/data/} 中。
 
 \subsection{消融实验设计}
 为系统评估数据规模、模型类型与任务粒度的影响，设计以下对照实验：
@@ -175,25 +175,25 @@
     \centering
     \begin{subfigure}{0.45\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{runs/obb/bottle_01_yolo11m_640_b4/BoxF1_curve.png}
+        \includegraphics[width=\textwidth]{report/figures/binary_yolo/BoxF1_curve.png}
         \caption{F1-Confidence曲线}
     \end{subfigure}
     \hfill
     \begin{subfigure}{0.45\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{runs/obb/bottle_01_yolo11m_640_b4/BoxP_curve.png}
+        \includegraphics[width=\textwidth]{report/figures/binary_yolo/BoxP_curve.png}
         \caption{Precision-Confidence曲线}
     \end{subfigure}
     \vskip\baselineskip
     \begin{subfigure}{0.45\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{runs/obb/bottle_01_yolo11m_640_b4/BoxPR_curve.png}
+        \includegraphics[width=\textwidth]{report/figures/binary_yolo/BoxPR_curve.png}
         \caption{Precision-Recall曲线}
     \end{subfigure}
     \hfill
     \begin{subfigure}{0.45\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{runs/obb/bottle_01_yolo11m_640_b4/BoxR_curve.png}
+        \includegraphics[width=\textwidth]{report/figures/binary_yolo/BoxR_curve.png}
         \caption{Recall-Confidence曲线}
     \end{subfigure}
     \caption{二分类模型性能曲线}
@@ -204,13 +204,13 @@
     \centering
     \begin{subfigure}{0.45\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{runs/obb/bottle_01_yolo11m_640_b4/confusion_matrix_normalized.png}
+        \includegraphics[width=\textwidth]{report/figures/binary_yolo/confusion_matrix_normalized.png}
         \caption{归一化混淆矩阵}
     \end{subfigure}
     \hfill
     \begin{subfigure}{0.45\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{runs/obb/bottle_01_yolo11m_640_b4/labels.jpg}
+        \includegraphics[width=\textwidth]{report/figures/binary_yolo/labels.jpg}
         \caption{标签分布}
     \end{subfigure}
     \caption{二分类模型混淆矩阵与标签}
@@ -219,7 +219,7 @@
 
 \begin{figure}[htbp]
     \centering
-    \includegraphics[width=0.9\textwidth]{runs/obb/bottle_01_yolo11m_640_b4/results.png}
+    \includegraphics[width=0.9\textwidth]{report/figures/binary_yolo/results.png}
     \caption{二分类模型训练过程指标曲线（由12项指标子图组成）}
     \label{fig:binary-metrics}
 \end{figure}
@@ -313,7 +313,7 @@
 
 \begin{figure}[htbp]
     \centering
-    \includegraphics[width=0.9\textwidth]{runs/obb/lcdtc_0123_yolo11m_1024_b40_fixed/results.png}
+    \includegraphics[width=0.9\textwidth]{report/figures/fourclass_yolo/results.png}
     \caption{大样本四分类YOLO训练过程指标曲线（由12项指标子图组成）}
     \label{fig:fourclass-metrics}
 \end{figure}
@@ -322,25 +322,25 @@
     \centering
     \begin{subfigure}{0.45\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{runs/obb/lcdtc_0123_yolo11m_1024_b40_fixed/BoxF1_curve.png}
+        \includegraphics[width=\textwidth]{report/figures/fourclass_yolo/BoxF1_curve.png}
         \caption{F1-Confidence曲线}
     \end{subfigure}
     \hfill
     \begin{subfigure}{0.45\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{runs/obb/lcdtc_0123_yolo11m_1024_b40_fixed/BoxP_curve.png}
+        \includegraphics[width=\textwidth]{report/figures/fourclass_yolo/BoxP_curve.png}
         \caption{Precision-Confidence曲线}
     \end{subfigure}
     \vskip\baselineskip
     \begin{subfigure}{0.45\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{runs/obb/lcdtc_0123_yolo11m_1024_b40_fixed/BoxPR_curve.png}
+        \includegraphics[width=\textwidth]{report/figures/fourclass_yolo/BoxPR_curve.png}
         \caption{Precision-Recall曲线}
     \end{subfigure}
     \hfill
     \begin{subfigure}{0.45\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{runs/obb/lcdtc_0123_yolo11m_1024_b40_fixed/BoxR_curve.png}
+        \includegraphics[width=\textwidth]{report/figures/fourclass_yolo/BoxR_curve.png}
         \caption{Recall-Confidence曲线}
     \end{subfigure}
     \caption{四分类模型性能曲线}
@@ -351,13 +351,13 @@
     \centering
     \begin{subfigure}{0.45\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{runs/obb/lcdtc_0123_yolo11m_1024_b40_fixed/confusion_matrix_normalized.png}
+        \includegraphics[width=\textwidth]{report/figures/fourclass_yolo/confusion_matrix_normalized.png}
         \caption{归一化混淆矩阵}
     \end{subfigure}
     \hfill
     \begin{subfigure}{0.45\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{runs/obb/lcdtc_0123_yolo11m_1024_b40_fixed/labels.jpg}
+        \includegraphics[width=\textwidth]{report/figures/fourclass_yolo/labels.jpg}
         \caption{标签分布}
     \end{subfigure}
     \caption{四分类模型混淆矩阵与标签}
@@ -411,7 +411,23 @@
 感谢浙江大学数学科学学院及竞赛组委会提供的宝贵学习机会，感谢指导教师的悉心指导。
 
 \begin{thebibliography}{9}
+\bibitem{breiman2001random}
+Breiman L. Random forests[J]. Machine Learning, 2001, 45(1): 5--32.
 
+\bibitem{cortes1995svm}
+Cortes C, Vapnik V. Support-vector networks[J]. Machine Learning, 1995, 20(3): 273--297.
+
+\bibitem{chen2016xgboost}
+Chen T, Guestrin C. XGBoost: A scalable tree boosting system[C]//Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining. 2016: 785--794.
+
+\bibitem{pedregosa2011sklearn}
+Pedregosa F, Varoquaux G, Gramfort A, et al. Scikit-learn: Machine learning in Python[J]. Journal of Machine Learning Research, 2011, 12: 2825--2830.
+
+\bibitem{bradski2000opencv}
+Bradski G. The OpenCV library[J]. Dr. Dobb's Journal of Software Tools, 2000, 25(11): 120--123.
+
+\bibitem{ultralytics}
+Ultralytics. Ultralytics YOLO Documentation[EB/OL]. \url{https://docs.ultralytics.com/}.
 \end{thebibliography}
 
 \newpage
@@ -434,16 +450,23 @@
 \section{决策树规则示例}
 从训练完成的传统机器学习决策树中提取的部分可读规则（完整规则见支撑材料）：
 \begin{verbatim}
-if area_ratio <= 0.18 and bottom_top_brightness_diff > 48.2:
-    return class 1 (little)
-elif area_ratio > 0.72 and saturation_mean > 52.0:
-    return class 3 (much)
-elif hue_std < 12.5 and dark_pixel_ratio > 0.35:
-    return class 0 (none)
+|--- block_mean_3_0 <= 135.10
+|   |--- drop_1_2 <= 4.34
+|   |   |--- block_s_mean_1_1 <= 68.47
+|   |   |   |--- lbp_r2_11 <= 0.03
+|   |   |   |   |--- class: 0
+|   |   |   |--- lbp_r2_11 >  0.03
+|   |   |   |   |--- gray_percentile_50 <= 123.00
+|   |   |   |   |   |--- class: 2
 ...
 \end{verbatim}
 
 \section{性能曲线图清单}
+论文正文引用的主要图像文件均已整理到 \texttt{report/figures/}：
+\begin{itemize}
+    \item \texttt{report/figures/binary\_yolo/}：二分类YOLO的F1、Precision、Recall、PR曲线，混淆矩阵，标签分布和训练过程曲线；
+    \item \texttt{report/figures/fourclass\_yolo/}：大样本四分类YOLO的F1、Precision、Recall、PR曲线，混淆矩阵，标签分布和训练过程曲线。
+\end{itemize}
 
 \end{appendices}
 
