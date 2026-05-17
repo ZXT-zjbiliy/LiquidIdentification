@@ -6,7 +6,7 @@ import shutil
 import subprocess
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE = ROOT / "LCDTC"
 DEFAULT_OUTPUT = ROOT / ".dataset_views" / "lcdtc_obb"
 SPLIT_ANNOTATIONS = {

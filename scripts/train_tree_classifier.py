@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from train_obb import DEFAULT_DATASET, LABEL_SET_ALIASES
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SEGMENT_OUTPUT = ROOT / "runs" / "tree_segments"
 DEFAULT_TREE_OUTPUT = ROOT / "runs" / "tree_classifier"
 ALGORITHM_CHOICES = (

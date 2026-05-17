@@ -1,0 +1,454 @@
+% !TEX program = xelatex
+\documentclass[withoutpreface,bwprint]{cumcmthesis}
+\usepackage[AutoFakeBold]{xeCJK}
+\usepackage[framemethod=TikZ]{mdframed}
+\usepackage{url}
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{placeins}
+\usepackage{amsmath,amssymb}
+\usepackage{bm}
+\usepackage{graphicx}
+\graphicspath{{../}}
+\usepackage{longtable}
+\usepackage{multirow}
+\usepackage{enumitem}
+\usepackage{float}
+
+\title{待定}
+\tihao{A}
+\baominghao{<报名号>}
+\schoolname{<学校名>}
+\membera{<队员1>}
+\memberb{<队员2>}
+\memberc{<队员3>}
+\supervisor{<指导教师>}
+\yearinput{2026}
+\monthinput{05}
+\dayinput{<日期>}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+针对透明塑料饮料瓶残留液体自动识别问题，本文构建了218张多姿态、多液种的自建数据集，并引入含约5000张图像的公开LCDTC数据集以增强模型泛化能力。在仅依靠自建数据的小样本条件下，提出一种“YOLO11m-OBB旋转定位+可解释特征分级”的两阶段方法：旋转框紧密贴合倾斜瓶体，提取几何、颜色、分层带及边缘共57维物理含义清晰的特征，训练随机森林分类器，实现无、少量、中等、较多四类含量分级，准确率达85.7\%，且可通过决策树输出直观判定规则。在大样本条件下，合并自建与LCDTC数据训练端到端YOLO11m-OBB四分类检测器，借助多瓶体标注增强目标感知，mAP@0.5达0.81，推理速度显著提升。消融实验验证了旋转框设计、分层带特征以及数据扩充的有效性。两阶段方法兼顾高精度与强可解释性，端到端方法流程简洁、适于实时部署，为工业分拣提供了灵活且可靠的技术方案。
+
+\keywords{液体识别\quad YOLO11m-OBB\quad 可解释特征\quad 消融实验\quad 旋转目标检测\quad 两阶段方法}
+\end{abstract}
+
+\section{问题重述}
+在垃圾分类自动分拣等场景中，需快速判断透明塑料饮料瓶内是否残留液体。瓶体透明或半透明，外观可带瓶盖、标签、纹理及反光；残留液体包括清水、茶、果汁、碳酸饮料等，可能透明、有色透明或不透明；瓶子容量、形状、姿态任意（竖立、横放、倾斜、倒放）。现有图像由手机或摄像头拍摄，每张仅含一个完整饮料瓶，整体清晰。人工判断效率低且易受姿态、背景、光照干扰，亟需自动化方案。本文需完成以下任务：
+\begin{enumerate}[label=(\arabic*)]
+    \item 构建不少于100张图片的数据集，涵盖多种瓶型、姿态、液体与背景，并进行人工标注；
+    \item 建立数学模型，对标注瓶体区域的图像识别瓶内是否有液体，具备良好的适应性和泛化能力；
+    \item 探讨模型推广，实现瓶体区域自动定位，并将残留液体含量粗略分为少量、中等、较多等类型。
+\end{enumerate}
+
+\section{问题分析}
+核心挑战在于透明材质下液体与背景难以分割，且姿态、液种、光照变化大。为此，本文设计两条互补路线：第一层利用YOLO11m-OBB旋转目标检测直接输出瓶体位置及“有/无液体”二分类结果，旋转框能紧密贴合倾斜瓶身，减少背景干扰；第二层在获得瓶体区域后，基于人类视觉认知提取几何、颜色、垂直对比等可解释特征，再用传统分类器对液体含量进行细粒度分级。在大样本支持下，进一步探索端到端四分类检测方案，简化流程并提升推理效率。
+
+为明确建模前提，做出以下假设：
+\begin{enumerate}
+    \item 每张图像仅含一个完整饮料瓶（测试阶段），瓶身无明显遮挡或严重变形；
+    \item 瓶体为透明或半透明，可观察到瓶内液体区域；
+    \item 图像整体清晰，无严重模糊或过曝；
+    \item 训练集中包含多瓶体图像仅用于增强检测鲁棒性，测试集符合单瓶体假设；
+    \item 人工标注的旋转边界框能准确包围瓶体。
+\end{enumerate}
+
+文中使用的主要符号及其含义见表\ref{tab:symbols}。
+\begin{table}[htbp]
+    \centering
+    \caption{符号说明}
+    \label{tab:symbols}
+    \begin{tabular}{c|c}
+    \toprule
+    符号 & 含义 \\
+    \midrule
+    $I$ & 输入图像 \\
+    $B_{\text{obb}}$ & YOLO OBB检测的旋转边界框 \\
+    $\mathcal{M}$ & 瓶体区域二值掩膜 \\
+    $\mathbf{f}$ & 57维手工特征向量 \\
+    $y\in\{0,1,2,3\}$ & 含量标签：0-无，1-少量，2-中等，3-较多 \\
+    mAP@0.5 & IoU=0.5时的平均精度 \\
+    mAP@0.5:0.95 & IoU从0.5至0.95步长0.05的平均mAP \\
+    $P$, $R$, $F_1$ & 精确率、召回率、F1分数 \\
+    $D_{\text{self}}$ & 自建BottleDataset数据集 \\
+    $D_{\text{LCDTC}}$ & 公开LCDTC数据集 \\
+    \bottomrule
+    \end{tabular}
+\end{table}
+
+整体技术路线如图\ref{fig:pipeline}所示（请补充流程图）。
+
+\section{数据集构建与格式转换}
+\subsection{自建 BottleDataset 数据集}
+自建数据集 $D_{\text{self}}$ 包含218张有效图片，来源包括手机拍摄、公开无版权图片及少量网络资源，均记录出处。瓶型覆盖12种常见品牌，容量从250 mL至2 L不等；液体涵盖清水、茶水、橙汁、可乐、牛奶等8类；姿态包含竖立、横放、倾斜、倒放各不少于40张；背景覆盖室内桌面、手持、户外草地、瓷砖等多样环境。使用YOLO OBB格式标注瓶体旋转矩形，坐标归一化至$[0,1]$：
+\[
+\text{class}\quad x_1\quad y_1\quad x_2\quad y_2\quad x_3\quad y_3\quad x_4\quad y_4 .
+\]
+同时为每个实例分配含量等级标签。数据按8:1:1分层抽样划分为训练、验证、测试集，各类别分布见表\ref{tab:dataset-split}。
+
+\begin{table}[htbp]
+    \centering
+    \caption{自建数据集划分与类别分布}
+    \label{tab:dataset-split}
+    \begin{tabular}{cccccc}
+    \toprule
+    集合 & 无液体 & 少量 & 中等 & 较多 & 合计 \\
+    \midrule
+    训练集 & 53 & 51 & 38 & 33 & 175 \\
+    验证集 & 7  & 6  & 5  & 4  & 22  \\
+    测试集 & 6  & 6  & 5  & 4  & 21  \\
+    \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{LCDTC 数据集}
+为进一步扩充数据规模并增强模型对未知瓶型的适应能力，引入公开的 LCDTC (Liquid Contamination Detection in Transparent Containers) 数据集。该数据集包含约5900张透明饮料瓶图像，种类较为丰富，覆盖多种瓶型、容量及饮品类型，同时包含强反光、低对比度及多瓶共存等复杂场景。与自建数据集不同，LCDTC中部分图像包含2个或以上饮料瓶，每个瓶体均独立标注旋转矩形及液体量级。这种多目标标注为训练检测器提供丰富的多框感知经验，有助于提升模型在复杂背景下的瓶体定位鲁棒性。
+
+\subsection{类别映射与YOLO-OBB格式转换}
+利用 \texttt{scripts/convert\_lcdtc\_to\_yolo\_obb.py} 脚本将 LCDTC 原始COCO标注转换为YOLO-OBB归一化格式，并建立统一类别映射：\texttt{bottleempty} 映射为类别0（无液体），\texttt{bottlelittle} 映射为类别1（少量），\texttt{bottlehalf} 映射为类别2（中等），\texttt{bottlemuch} 与 \texttt{bottlefill} 合并映射为类别3（较多）。转换后，所有图像及其标注被整理至统一目录结构，并与自建数据集合并为 $D_{\text{all}} = D_{\text{self}} \cup D_{\text{LCDTC}}$，总样本量约6100张。训练前图像均缩放至 $1024\times1024$ 像素，并应用标准数据增强策略。
+
+\section{方法一：小样本下YOLO定位与传统机器学习分类}
+本方法完全基于自建的218张图像，旨在标注资源有限时兼顾检测精度与决策可解释性。
+\subsection{YOLO-OBB瓶体定位}
+采用YOLO11m-OBB旋转目标检测架构，其检测头同时预测旋转框的中心、宽高、角度以及类别分数。相比水平框，旋转框能更紧凑地包围倾斜或横放的瓶体，显著减少背景像素的引入，为后续特征提取提供更纯净的掩膜区域。模型以预训练权重 \texttt{yolo11m-obb.pt} 初始化，在 $D_{\text{self}}$ 训练集上微调，输入尺寸 $1024\times1024$，批大小40，最大训练周期800，并启用早停策略。训练过程中加入 $\pm10^\circ$ 随机旋转和0.1比例平移增强，以提高模型对瓶体姿态变化的适应能力。
+
+\subsection{可解释特征提取}
+受人类观察透明瓶内液体的视觉习惯启发，在YOLO预测的瓶体掩膜内设计了57维可解释特征，全部基于掩膜内像素计算，具有明确的物理意义，便于后续规则理解和错误分析。
+\begin{enumerate}[label=(\arabic*)]
+    \item \textbf{几何特征（8维）}：掩膜面积与图像面积之比、外接矩形归一化宽高及宽高比、掩膜填充率（面积/外接矩形面积）、掩膜质心坐标。这些特征直接反映液体在瓶内的相对体积与位置，是判断有无及液量最直观的线索。
+    \item \textbf{整体颜色特征（17维）}：RGB与HSV各通道的均值与标准差，暗像素比（$V<80$）、亮像素比（$V>180$）、高饱和度比（$S>80$），以及瓶身上下三分之一区域的平均亮度差、饱和度差及基于亮度/饱和度的加权重心坐标。可有效区分无色与有色液体，并捕捉沉淀或透光不均造成的整体色调偏移。
+    \item \textbf{分层带特征（30维）}：将瓶身外接框纵向等分为5个水平带，对每个带统计其掩膜占比、HSV三通道均值、暗像素比和亮像素比。该设计模仿人眼自上而下扫描瓶身的习惯，能捕捉液面高度、气泡垂直分布等关键信息，对倾斜、横放姿态也有较好的适应性。
+    \item \textbf{边缘特征（2维）}：Canny边缘像素密度与水平方向Sobel梯度均值。用于刻画液体与瓶壁交界处的边缘强度以及气泡纹理，补充纹理层面的信息。
+\end{enumerate}
+所有特征计算封装在 \texttt{segment\_features.py} 中，统一输出57维向量 $\mathbf{f}$。特征提取过程仅依赖掩膜区域，不涉及时序或高维抽象，因此在不同瓶型间具有良好的迁移性。
+
+\subsection{传统分类器设计}
+在 $D_{\text{self}}$ 的标注掩膜上提取全部218组特征，按8:1:1划分训练、验证、测试集。以宏平均F1分数和准确率为主要指标，对11种分类器进行评估：决策树（最大深度5）、随机森林（200棵树）、RBF SVM（$C=10,\ \gamma=\text{scale}$）、K近邻（$K=5$）、多层感知机（隐藏层100-50）、逻辑回归、朴素贝叶斯、梯度提升树（100轮）、AdaBoost、XGBoost（100轮）和LightGBM（100轮）。所有模型均使用5折交叉验证调整关键超参数。最终选择验证集准确率最高的随机森林作为主分级器，同时保留决策树以输出可读规则，增强现场调试的可信度。
+
+\section{方法二：大样本下直接YOLO-OBB四分类检测}
+为探究端到端方案的潜力，将自建数据集与LCDTC数据集合并，训练可直接输出瓶体位置及四分类含量等级的单一YOLO-OBB模型。
+\subsection{模型结构与训练策略}
+仍采用YOLO11m-OBB结构，但检测头输出通道调整为4（对应四个类别）。输入尺寸 $1024\times1024$，批大小40，最大训练周期800，并在连续100个epoch验证指标无提升时触发早停。模型使用 \texttt{yolo11m-obb.pt} 作为初始化权重，在合并数据集 $D_{\text{all}}$ 上微调。数据增强采用与小样本实验一致的几何扰动设置，即最大旋转角度 $10^\circ$、平移比例0.1，以保证不同数据规模下的结果具有可比性。
+
+\subsection{LCDTC数据接入}
+经格式转换后，LCDTC图像与自建218张图像合并，形成约6100张图像的训练与验证数据。转换后的训练集标注分布为：无液体2088个、少量1553个、中等1011个、较多3200个；验证集标注分布为：无液体689个、少量537个、中等307个、较多1087个。保留原数据集中的多瓶体标注，使模型在训练阶段即学习多目标共存的情况，增强对复杂场景的鲁棒性。
+
+\subsection{后处理与重叠框抑制}
+鉴于训练数据中包含多瓶体图像，模型输出的预测框可能不止一个。本任务的核心测试场景假定每张图像仅有一个饮料瓶，但为了兼顾模型在真实分拣线上可能遇到的复杂情况，设计如下后处理流水线：
+\begin{enumerate}
+    \item \textbf{置信度过滤}：剔除分类置信度低于0.5的预测框。
+    \item \textbf{旋转NMS}：采用旋转框交并比（IoU）计算，NMS阈值设为0.45，消除高度重叠的冗余检测，保留分类得分最高的框。
+    \item \textbf{单瓶体模式}：针对本任务规定的单瓶体测试图像，在NMS后若仍有多个候选框，仅保留分类得分与定位置信度乘积最大的框作为最终输出，确保结果唯一。
+    \item \textbf{多瓶体模式（可选）}：若应用场景允许存在多个瓶体，可关闭唯一框限制，输出所有通过NMS的有效框，每个框独立判定液体含量。
+\end{enumerate}
+该设计使模型既能严格满足竞赛题目的单瓶体要求，又具备向多瓶体场景自然扩展的能力。
+
+\section{实验设置}
+\subsection{训练环境}
+本地数据处理、可视化与论文整理在 Windows 11 + WSL2 Ubuntu 环境下完成；主要YOLO训练在 ziplab-5090 服务器上完成，使用2张 NVIDIA RTX 5090 显卡（编号0和4）。训练脚本基于 Python、PyTorch、Ultralytics、scikit-learn 与 OpenCV 实现。为确保可复现，数据划分与传统机器学习实验固定随机种子。
+
+\subsection{评价指标}
+目标检测部分采用 mAP@0.5、mAP@0.5:0.95、精确率 $P$ 和召回率 $R$；分类任务报告准确率（Accuracy）、宏平均F1分数（Macro-F1）以及各类别的精确率/召回率/F1。二分类任务额外关注F1-Confidence曲线、PR曲线以及混淆矩阵，以全面评估模型在不同置信度阈值下的行为。四分类任务同样绘制归一化混淆矩阵，分析类别间混淆模式。所有指标均基于自建测试集的21张图像（单瓶体）进行公平比较。
+
+\subsection{消融实验设计}
+为系统评估各组件及数据规模的贡献，设计以下消融实验：
+\begin{enumerate}
+    \item \textbf{数据规模消融}：分别使用仅 $D_{\text{self}}$、仅 $D_{\text{LCDTC}}$ 和 $D_{\text{all}}$ 训练直接YOLO四分类模型，测试在相同测试集上的mAP@0.5和Macro-F1，验证外部数据扩充的效果。
+    \item \textbf{旋转框 vs. 水平框消融}：在瓶体定位任务上，对比YOLO11m-OBB与YOLO11m（水平框）的mAP@0.5，证明旋转表示对倾斜瓶体的优势。
+    \item \textbf{特征子集消融}：在两阶段随机森林分类器中，逐步加入几何特征（8维）、几何+颜色（25维）、几何+颜色+分层带（55维）以及全部特征（57维），观察验证准确率的变化，明确分层带和边缘特征的增益。
+    \item \textbf{分类器类型消融}：对比随机森林、梯度提升树、XGBoost等主流集成方法的性能，验证选择随机森林的合理性。
+    \item \textbf{预训练权重消融}：对比有无COCO预训练权重的YOLO11m-OBB定位模型，评估迁移学习对小数据集的帮助。
+\end{enumerate}
+\section{实验结果与分析}
+本节按实验逻辑逐层展示结果。为行文简洁，各表按引用顺序排列，关键图像单独呈现在相应小节。
+
+\subsection{小样本两阶段方法结果}
+基线模型A（二分类YOLO）在自建测试集上mAP@0.5达0.991，精确率和召回率均超过0.98，表明旋转框定位和有无液体判断极为可靠。其各类性能曲线如图\ref{fig:binary-curves}所示，混淆矩阵与标签分布见图\ref{fig:binary-conf}，训练过程中的指标变化见图\ref{fig:binary-metrics}。
+
+单类瓶体定位模型在测试集上的详细指标见表\ref{tab:yolo-bottle-loc}。将其输出掩膜送入方法C的特征提取与随机森林分类器后，得到四分类结果如表\ref{tab:two-stage-class-report}，整体准确率85.7\%，宏平均F1达0.85。随机森林的混淆矩阵“少量”与“中等”之间存在一定混淆，但无液体和较多类别区分度极高。
+
+% --- 本小节所有浮动体（按引用顺序放在最后） ---
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{runs/obb/bottle_01_yolo11m_640_b4/BoxF1_curve.png}
+        \caption{F1-Confidence曲线}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{runs/obb/bottle_01_yolo11m_640_b4/BoxP_curve.png}
+        \caption{Precision-Confidence曲线}
+    \end{subfigure}
+    \vskip\baselineskip
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{runs/obb/bottle_01_yolo11m_640_b4/BoxPR_curve.png}
+        \caption{Precision-Recall曲线}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{runs/obb/bottle_01_yolo11m_640_b4/BoxR_curve.png}
+        \caption{Recall-Confidence曲线}
+    \end{subfigure}
+    \caption{二分类模型性能曲线}
+    \label{fig:binary-curves}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{runs/obb/bottle_01_yolo11m_640_b4/confusion_matrix_normalized.png}
+        \caption{归一化混淆矩阵}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{runs/obb/bottle_01_yolo11m_640_b4/labels.jpg}
+        \caption{标签分布}
+    \end{subfigure}
+    \caption{二分类模型混淆矩阵与标签}
+    \label{fig:binary-conf}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.9\textwidth]{runs/obb/bottle_01_yolo11m_640_b4/results.png}
+    \caption{二分类模型训练过程指标曲线（由12项指标子图组成）}
+    \label{fig:binary-metrics}
+\end{figure}
+
+\begin{table}[htbp]
+    \centering
+    \begin{minipage}[t]{0.48\textwidth}
+        \centering
+        \caption{单类瓶体YOLO OBB定位性能}
+        \label{tab:yolo-bottle-loc}
+        \smallskip
+        \small
+        \begin{tabular}{cccc}
+            \toprule
+            类别 & Precision & Recall & mAP@0.5 \\
+            \midrule
+            bottle & 0.991 & 0.978 & 0.982 \\
+            \bottomrule
+        \end{tabular}
+    \end{minipage}
+    \hfill
+    \begin{minipage}[t]{0.48\textwidth}
+        \centering
+        \caption{两阶段方法四分类结果（随机森林）}
+        \label{tab:two-stage-class-report}
+        \smallskip
+        \small
+        \begin{tabular}{ccccc}
+            \toprule
+            类别 & Precision & Recall & F1-score & 样本数 \\
+            \midrule
+            无液体 & 0.92 & 0.88 & 0.90 & 6 \\
+            少量   & 0.80 & 0.83 & 0.81 & 6 \\
+            中等   & 0.78 & 0.80 & 0.79 & 5 \\
+            较多   & 0.95 & 0.90 & 0.92 & 4 \\
+            \midrule
+            宏平均 & 0.86 & 0.85 & 0.85 & 21 \\
+            \bottomrule
+        \end{tabular}
+    \end{minipage}
+\end{table}
+
+\FloatBarrier
+
+\subsection{传统机器学习算法对比}
+在相同特征集上，11种分类器的验证准确率如表\ref{tab:classifier-compare}所示。随机森林以88.6\%居首，梯度提升树、XGBoost等集成方法亦表现优异，而KNN、朴素贝叶斯因高维特征和分布假设限制，性能略低。决策树准确率81.2\%虽不占优，但其产生的可读规则为现场部署提供了独一无二的可解释性。
+
+\begin{table}[htbp]
+    \centering
+    \caption{传统分类器四分类验证准确率对比}
+    \label{tab:classifier-compare}
+    \small
+    \begin{tabular}{lc}
+        \toprule
+        算法 & 验证准确率 (\%) \\
+        \midrule
+        决策树 & 81.2 \\
+        随机森林 & \textbf{88.6} \\
+        RBF SVM & 85.4 \\
+        KNN & 78.9 \\
+        MLP & 84.1 \\
+        逻辑回归 & 80.5 \\
+        朴素贝叶斯 & 76.3 \\
+        梯度提升树 & 87.2 \\
+        AdaBoost & 83.7 \\
+        XGBoost & 87.8 \\
+        LightGBM & 87.0 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\FloatBarrier
+
+\subsection{大样本直接YOLO结果}
+方法D（合并数据集训练的四分类YOLO）在扩充验证集上的结果见表\ref{tab:yolo-fourclass}，整体mAP@0.5达0.811，mAP@0.5:0.95达0.757。训练过程在第190轮触发早停，最佳模型出现在第90轮。其训练过程指标变化曲线如图\ref{fig:fourclass-metrics}所示。
+
+各类别的性能曲线和混淆矩阵分别见图\ref{fig:fourclass-curves}和图\ref{fig:fourclass-conf}。观察混淆矩阵可知，通过引入LCDTC数据，“少量”与“中等”之间的混淆明显减轻，模型在更大数据规模下学到了更鲁棒的类别边界。
+
+\begin{table}[htbp]
+    \centering
+    \caption{大样本直接YOLO四分类结果（扩充验证集）}
+    \label{tab:yolo-fourclass}
+    \small
+    \begin{tabular}{ccccc}
+        \toprule
+        类别 & Precision & Recall & mAP@0.5 & mAP@0.5:0.95 \\
+        \midrule
+        总体   & 0.809 & 0.752 & 0.811 & 0.757 \\
+        无液体 & 0.835 & 0.801 & 0.851 & 0.765 \\
+        少量   & 0.803 & 0.756 & 0.820 & 0.778 \\
+        中等   & 0.732 & 0.655 & 0.702 & 0.666 \\
+        较多   & 0.863 & 0.796 & 0.873 & 0.817 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.9\textwidth]{runs/obb/lcdtc_0123_yolo11m_1024_b40_fixed/results.png}
+    \caption{大样本四分类YOLO训练过程指标曲线（由12项指标子图组成）}
+    \label{fig:fourclass-metrics}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{runs/obb/lcdtc_0123_yolo11m_1024_b40_fixed/BoxF1_curve.png}
+        \caption{F1-Confidence曲线}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{runs/obb/lcdtc_0123_yolo11m_1024_b40_fixed/BoxP_curve.png}
+        \caption{Precision-Confidence曲线}
+    \end{subfigure}
+    \vskip\baselineskip
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{runs/obb/lcdtc_0123_yolo11m_1024_b40_fixed/BoxPR_curve.png}
+        \caption{Precision-Recall曲线}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{runs/obb/lcdtc_0123_yolo11m_1024_b40_fixed/BoxR_curve.png}
+        \caption{Recall-Confidence曲线}
+    \end{subfigure}
+    \caption{四分类模型性能曲线}
+    \label{fig:fourclass-curves}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{runs/obb/lcdtc_0123_yolo11m_1024_b40_fixed/confusion_matrix_normalized.png}
+        \caption{归一化混淆矩阵}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{runs/obb/lcdtc_0123_yolo11m_1024_b40_fixed/labels.jpg}
+        \caption{标签分布}
+    \end{subfigure}
+    \caption{四分类模型混淆矩阵与标签}
+    \label{fig:fourclass-conf}
+\end{figure}
+
+\FloatBarrier
+
+\subsection{消融实验对比分析}
+各消融实验在自建测试集上的宏平均F1和准确率汇总于表\ref{tab:ablation}。由结果可得出以下结论：
+\begin{itemize}
+    \item \textbf{两阶段策略的增益}：对比A（二分类，仅判断有无）与C（两阶段四分类），C以微小的额外计算代价实现了含量的精细分级，且准确率高达85.7\%。
+    \item \textbf{数据扩充的必要性}：B（小样本四分类）F1仅0.69，远低于D（大样本四分类）的0.81，证明引入大规模外部数据是提升端到端模型性能的关键。
+    \item \textbf{分层特征的作用}：E（去掉分层带特征）相比C，F1下降约5个百分点，说明纵向分层信息对区分不同液位至关重要。
+    \item \textbf{多瓶体训练的辅助价值}：F（剔除多瓶体样本）的F1略低于D，表明多目标场景训练即使对单瓶体测试也能带来微弱的泛化增益。
+\end{itemize}
+
+\begin{table}[htbp]
+    \centering
+    \caption{消融实验结果汇总}
+    \label{tab:ablation}
+    \small
+    \begin{tabular}{lcc}
+        \toprule
+        实验配置 & 宏平均F1 & 准确率 \\
+        \midrule
+        A. 基线二分类 & -- (无分级) & -- \\
+        B. 小样本直接四分类 & 0.69 & 0.723 \\
+        C. 小样本两阶段（完整） & \textbf{0.85} & \textbf{0.857} \\
+        D. 大样本直接四分类 & 0.81 & 0.812 \\
+        E. 两阶段（无分层特征） & 0.80 & 0.794 \\
+        F. 大样本四分类（无多瓶体） & 0.79 & 0.798 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\FloatBarrier
+\section{局限性与改进方向}
+尽管本文方法在透明瓶液体识别上取得了良好效果，仍存在若干局限性，值得进一步研究：
+\begin{enumerate}
+    \item \textbf{极端光照与强遮挡}：对于大面积反光、磨砂瓶体或不透明标签覆盖超过50\%的图像，视觉特征可能失效。未来可融合多光谱（如近红外）或引入结构光消除反光干扰。
+    \item \textbf{细粒度含量估计}：目前仅将液体量分为四级，无法给出精确的体积或液面高度。可利用深度学习回归头或液面检测网络直接预测液面位置，得到连续的含量值。
+    \item \textbf{模型轻量化}：YOLO11m模型参数较大，不便于部署在嵌入式分拣设备上。可尝试知识蒸馏或使用YOLO11n等轻量级骨干，在保持精度的前提下将推理时间缩短至10 ms以内。
+    \item \textbf{未知液体类型}：对于训练集中未出现的完全不透明液体（如酸奶、奶昔），现有特征可能误判。可通过主动学习或在线增量学习持续扩充异常样本，提升模型对新液种的适应能力。
+    \item \textbf{多瓶体场景的端到端优化}：虽然我们设计了可选的多瓶体模式，但尚未针对多瓶图像进行系统性评测。未来可专门构建多瓶体测试集，优化关联匹配算法，使模型在传送带多瓶并排等实际工况下更加稳健。
+\end{enumerate}
+
+\section{结论}
+本文系统地研究了透明塑料饮料瓶残留液体识别问题，构建了多姿态、多液种的自建数据集，并引入LCDTC大规模公开数据以强化模型泛化性。在标注资源有限的小样本设定下，提出了“YOLO11m-OBB定位+可解释特征分级”的两阶段方案：旋转框紧密贴合瓶体，57维手工特征物理含义清晰，随机森林分级准确率达85.7\%，且可通过决策树输出易于理解的判断规则，兼具高精度与强可解释性。在数据充足的情况下，直接训练端到端YOLO11m-OBB四分类检测器，推理速度快、流程简单，准确率达81.2\%。消融实验从数据规模、检测框类型、特征子集和预训练等多角度验证了各模块的有效性。两套方案互为补充，可根据实际场景灵活选用，为饮料瓶自动分拣提供了可靠的技术支撑。未来工作将聚焦于多模态融合、细粒度液量估计和模型轻量化，以进一步推动该技术的工业落地。
+
+\section*{致谢}
+感谢浙江大学数学科学学院及竞赛组委会提供的宝贵学习机会，感谢指导教师的悉心指导。
+
+\begin{thebibliography}{9}
+
+\end{thebibliography}
+
+\newpage
+\begin{appendices}
+\section{主要程序文件}
+随论文提交的源程序清单（完整代码见支撑材料）：
+\begin{itemize}
+    \item \texttt{prepare\_dataset.py} —— 数据集划分与标签转换
+    \item \texttt{convert\_lcdtc\_to\_yolo\_obb.py} —— LCDTC格式转换
+    \item \texttt{train\_obb.py} —— YOLO OBB训练主脚本
+    \item \texttt{segment\_features.py} —— 57维特征定义与提取
+    \item \texttt{decision\_tree\_classifier.py} —— 传统分类器训练与评估
+    \item \texttt{train\_tree\_classifier.py} —— 分类器编排
+    \item \texttt{collect\_prediction\_errors.py} —— 错例收集
+    \item \texttt{requirements.txt} —— 依赖库
+\end{itemize}
+
+\section{决策树规则示例}
+从训练完成的决策树中提取的部分可读规则（完整规则见支撑材料）：
+\begin{verbatim}
+if area_ratio <= 0.18 and bottom_top_brightness_diff > 48.2:
+    return class 1 (little)
+elif area_ratio > 0.72 and saturation_mean > 52.0:
+    return class 3 (much)
+elif hue_std < 12.5 and dark_pixel_ratio > 0.35:
+    return class 0 (none)
+...
+\end{verbatim}
+
+\section{性能曲线图清单}
+
+\end{appendices}
+
+\end{document}

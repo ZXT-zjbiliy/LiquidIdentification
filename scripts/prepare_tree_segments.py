@@ -10,7 +10,7 @@ from segment_features import FEATURE_COLUMNS, extract_segment_features
 from train_obb import DEFAULT_DATASET, LABEL_SET_ALIASES, LABEL_SETS
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = ROOT / "runs" / "tree_segments"
 PROJECT_MODEL_ROOT = ROOT / "runs" / "obb"
 SPLITS = ("train", "val", "test")

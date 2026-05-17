@@ -20,3 +20,19 @@ __pycache__/
 # Downloaded/trained model weights
 *.pt
 *.pth
+
+# Transfer bundles and archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# LaTeX build outputs
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
+*.pdf

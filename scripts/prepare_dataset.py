@@ -5,7 +5,7 @@ import random
 import shutil
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATASET = ROOT / "bottleDataset"
 SPLITS = ("train", "val", "test")
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}

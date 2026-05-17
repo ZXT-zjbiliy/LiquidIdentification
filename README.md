@@ -6,6 +6,18 @@ Bottle liquid-level identification with YOLO OBB
 
 Environment setup: see [ENVIRONMENT.md](ENVIRONMENT.md)
 
+## Project Layout
+
+```text
+scripts/        Program entry points and data conversion/training utilities
+bottleDataset/  Small bottle dataset tracked by git
+report/         Paper draft and compiled PDF
+runs/           Local experiment outputs, ignored by git
+LCDTC/          External LCDTC dataset, ignored by git
+```
+
+Run scripts from the repository root, for example `python scripts/train_obb.py ...`.
+
 ## 中文说明
 
 本项目使用 Ultralytics YOLO OBB 模型识别瓶中液体状态，支持三套标签：
@@ -45,7 +57,7 @@ bottleDataset/
   labels -> labels_0123、labels_01 或 label_bottle
 ```
 
-`bottleDataset/labels` 是由 `train_obb.py` 自动创建的当前标签入口，Ultralytics 默认会从 `images` 推导并查找同级的 `labels`，所以训练脚本会在启动前把 `labels` 指向所选标签集
+`bottleDataset/labels` 是由 `scripts/train_obb.py` 自动创建的当前标签入口，Ultralytics 默认会从 `images` 推导并查找同级的 `labels`，所以训练脚本会在启动前把 `labels` 指向所选标签集
 
 每个标签文件使用 YOLO OBB 格式：
 
@@ -57,7 +69,7 @@ class x1 y1 x2 y2 x3 y3 x4 y4
 
 ### 数据处理
 
-`prepare_dataset.py` 用于：
+`scripts/prepare_dataset.py` 用于：
 
 - 将原始 `labels` 重命名为 `labels_0123`
 - 根据 `labels_0123` 创建 `labels_01`
@@ -68,25 +80,25 @@ class x1 y1 x2 y2 x3 y3 x4 y4
 默认比例是 `8:1:1`：
 
 ```bash
-python prepare_dataset.py
+python scripts/prepare_dataset.py
 ```
 
 只预览划分计划，不移动文件：
 
 ```bash
-python prepare_dataset.py --dry-run
+python scripts/prepare_dataset.py --dry-run
 ```
 
 自定义比例：
 
 ```bash
-python prepare_dataset.py --train 0.7 --val 0.2 --test 0.1
+python scripts/prepare_dataset.py --train 0.7 --val 0.2 --test 0.1
 ```
 
-从 Roboflow 下载普通 YOLO 检测格式后，可以用 `convert_roboflow_yolo_to_obb.py` 转成当前项目的 OBB 标签格式：
+从 Roboflow 下载普通 YOLO 检测格式后，可以用 `scripts/convert_roboflow_yolo_to_obb.py` 转成当前项目的 OBB 标签格式：
 
 ```bash
-python convert_roboflow_yolo_to_obb.py --source path/to/roboflow_dataset --output importedDataset --overwrite
+python scripts/convert_roboflow_yolo_to_obb.py --source path/to/roboflow_dataset --output importedDataset --overwrite
 ```
 
 默认类名映射适配 Roboflow 的 `Bottle fill level` 数据集：
@@ -101,40 +113,40 @@ three_quarters_level -> much
 如果下载的数据集类名不同，可以手动指定映射：
 
 ```bash
-python convert_roboflow_yolo_to_obb.py --source path/to/roboflow_dataset --output importedDataset --class-map bottle=none level=mid --overwrite
+python scripts/convert_roboflow_yolo_to_obb.py --source path/to/roboflow_dataset --output importedDataset --class-map bottle=none level=mid --overwrite
 ```
 
 ### 分割后传统机器学习数据
 
-`prepare_tree_segments.py` 用于给后续传统机器学习分类器准备数据。默认不使用任何已有模型，而是直接读取 YOLO OBB 标签的四点框生成 mask，只保留 mask 内的图像区域，再保存分割后的图片和一份 `features.csv`
+`scripts/prepare_tree_segments.py` 用于给后续传统机器学习分类器准备数据。默认不使用任何已有模型，而是直接读取 YOLO OBB 标签的四点框生成 mask，只保留 mask 内的图像区域，再保存分割后的图片和一份 `features.csv`
 
 ```bash
-python prepare_tree_segments.py --label-set labels_0123 --output runs/tree_segments --overwrite
+python scripts/prepare_tree_segments.py --label-set labels_0123 --output runs/tree_segments --overwrite
 ```
 
-`train_tree_classifier.py` 会把分割预处理和分类器训练串起来，中间会自动生成并读取同一份 `features.csv`。默认算法仍是 `decision-tree`，也可以通过 `--algorithm` 换成常见机器学习算法。
+`scripts/train_tree_classifier.py` 会把分割预处理和分类器训练串起来，中间会自动生成并读取同一份 `features.csv`。默认算法仍是 `decision-tree`，也可以通过 `--algorithm` 换成常见机器学习算法。
 
 ```bash
-python train_tree_classifier.py --label-set labels_0123 --segments-output runs/tree_segments_0123 --tree-output runs/tree_classifier_0123 --overwrite-segments --max-depth 5 --min-samples-leaf 3
+python scripts/train_tree_classifier.py --label-set labels_0123 --segments-output runs/tree_segments_0123 --tree-output runs/tree_classifier_0123 --overwrite-segments --max-depth 5 --min-samples-leaf 3
 ```
 
 如果已经有 `features.csv`，可以跳过分割直接训练：
 
 ```bash
-python train_tree_classifier.py --features runs/tree_segments/features.csv --tree-output runs/tree_classifier --max-depth 5 --min-samples-leaf 3
+python scripts/train_tree_classifier.py --features runs/tree_segments/features.csv --tree-output runs/tree_classifier --max-depth 5 --min-samples-leaf 3
 ```
 
 训练随机森林或 SVM：
 
 ```bash
-python train_tree_classifier.py --features runs/tree_segments/features.csv --tree-output runs/tree_classifier_rf --algorithm random-forest --n-estimators 300 --max-depth 8 --min-samples-leaf 2
-python train_tree_classifier.py --features runs/tree_segments/features.csv --tree-output runs/tree_classifier_svm --algorithm rbf-svm --svm-c 3.0 --svm-gamma scale
+python scripts/train_tree_classifier.py --features runs/tree_segments/features.csv --tree-output runs/tree_classifier_rf --algorithm random-forest --n-estimators 300 --max-depth 8 --min-samples-leaf 2
+python scripts/train_tree_classifier.py --features runs/tree_segments/features.csv --tree-output runs/tree_classifier_svm --algorithm rbf-svm --svm-c 3.0 --svm-gamma scale
 ```
 
 一次性训练全部支持的传统机器学习算法，并在最后输出最佳验证集准确率：
 
 ```bash
-python train_tree_classifier.py --features runs/tree_segments/features.csv --tree-output runs/tree_classifier_all --algorithm all --n-estimators 300 --max-depth 8 --min-samples-leaf 2 --neighbors 5 --svm-c 3.0 --svm-gamma scale --max-iter 3000
+python scripts/train_tree_classifier.py --features runs/tree_segments/features.csv --tree-output runs/tree_classifier_all --algorithm all --n-estimators 300 --max-depth 8 --min-samples-leaf 2 --neighbors 5 --svm-c 3.0 --svm-gamma scale --max-iter 3000
 ```
 
 常用参数：
@@ -158,7 +170,7 @@ python train_tree_classifier.py --features runs/tree_segments/features.csv --tre
 --no-progress 关闭 tqdm 进度条
 ```
 
-分类器会使用 `segment_features.py` 中定义的可解释特征：
+分类器会使用 `scripts/segment_features.py` 中定义的可解释特征：
 
 ```text
 mask 几何：mask 面积比例、外接框宽高比例、mask 填充率、mask 中心位置
@@ -193,10 +205,10 @@ runs/tree_segments/
 
 `features.csv` 会记录分割后的图片路径、原标签、mask 几何、颜色、分层和边缘特征，可直接复用于以上分类算法
 
-如果需要自动打标，只允许使用本项目前面 `train_obb.py` 训练出的权重，例如：
+如果需要自动打标，只允许使用本项目前面 `scripts/train_obb.py` 训练出的权重，例如：
 
 ```bash
-python train_tree_classifier.py --label-model runs/obb/bottle_01_yolo11m_640_b4/weights/best.pt --label-set labels_0123 --segments-output runs/tree_segments_0123_model_labeled --tree-output runs/tree_classifier_0123_model_labeled --overwrite-segments --max-depth 5 --min-samples-leaf 3
+python scripts/train_tree_classifier.py --label-model runs/obb/bottle_01_yolo11m_640_b4/weights/best.pt --label-set labels_0123 --segments-output runs/tree_segments_0123_model_labeled --tree-output runs/tree_classifier_0123_model_labeled --overwrite-segments --max-depth 5 --min-samples-leaf 3
 ```
 
 `--label-model` 只接受 `runs/obb/` 下的项目训练权重，不接受 `yolo11n-seg.pt` 这类外部模型名
@@ -232,25 +244,25 @@ test      6     15
 训练四分类模型：
 
 ```bash
-python train_obb.py --model yolo11m-obb.pt --label-set labels_0123 --epochs 200 --imgsz 640 --batch 4 --device 0 --workers 2 --name bottle_0123_yolo11m_640_b4
+python scripts/train_obb.py --model yolo11m-obb.pt --label-set labels_0123 --epochs 200 --imgsz 640 --batch 4 --device 0 --workers 2 --name bottle_0123_yolo11m_640_b4
 ```
 
 训练二分类 `none/exist` 模型：
 
 ```bash
-python train_obb.py --model yolo11m-obb.pt --label-set labels_01 --epochs 200 --imgsz 640 --batch 4 --device 0 --workers 2 --name bottle_01_yolo11m_640_b4
+python scripts/train_obb.py --model yolo11m-obb.pt --label-set labels_01 --epochs 200 --imgsz 640 --batch 4 --device 0 --workers 2 --name bottle_01_yolo11m_640_b4
 ```
 
 训练单类 `bottle` 模型：
 
 ```bash
-python train_obb.py --model yolo11m-obb.pt --label-set label_bottle --epochs 200 --imgsz 640 --batch 4 --device 0 --workers 2 --name bottle_only_yolo11m_640_b4
+python scripts/train_obb.py --model yolo11m-obb.pt --label-set label_bottle --epochs 200 --imgsz 640 --batch 4 --device 0 --workers 2 --name bottle_only_yolo11m_640_b4
 ```
 
 启用位移和旋转数据增强：
 
 ```bash
-python train_obb.py --model yolo11m-obb.pt --label-set label_bottle --epochs 200 --imgsz 640 --batch 4 --device 0 --workers 2 --name bottle_only_aug_yolo11m_640_b4 --augment-geom --degrees 10 --translate 0.1
+python scripts/train_obb.py --model yolo11m-obb.pt --label-set label_bottle --epochs 200 --imgsz 640 --batch 4 --device 0 --workers 2 --name bottle_only_aug_yolo11m_640_b4 --augment-geom --degrees 10 --translate 0.1
 ```
 
 `--label-set` 支持长写和短写：
@@ -284,9 +296,9 @@ label_bottle 或 bottle
 只检查会使用哪个 dataset yaml，不启动训练：
 
 ```bash
-python train_obb.py --label-set labels_01 --prepare-data-only
-python train_obb.py --label-set labels_0123 --prepare-data-only
-python train_obb.py --label-set label_bottle --prepare-data-only
+python scripts/train_obb.py --label-set labels_01 --prepare-data-only
+python scripts/train_obb.py --label-set labels_0123 --prepare-data-only
+python scripts/train_obb.py --label-set label_bottle --prepare-data-only
 ```
 
 使用 `--label-set` 时不要再传 `--data bottle_obb.yaml`，否则脚本无法自动切换不同标签集
@@ -443,7 +455,7 @@ bottleDataset/
   labels -> labels_0123, labels_01, or label_bottle
 ```
 
-`bottleDataset/labels` is the active label entry created by `train_obb.py`, Ultralytics derives the label path from `images` and looks for a sibling `labels` directory, so the training script points `labels` to the selected label set before training starts
+`bottleDataset/labels` is the active label entry created by `scripts/train_obb.py`, Ultralytics derives the label path from `images` and looks for a sibling `labels` directory, so the training script points `labels` to the selected label set before training starts
 
 Each label file uses YOLO OBB format:
 
@@ -455,7 +467,7 @@ The first value is the class id, and the following eight values are normalized c
 
 ### Dataset Preparation
 
-`prepare_dataset.py` is used to:
+`scripts/prepare_dataset.py` is used to:
 
 - rename the original `labels` directory to `labels_0123`
 - create `labels_01` from `labels_0123`
@@ -466,25 +478,25 @@ The first value is the class id, and the following eight values are normalized c
 The default split ratio is `8:1:1`:
 
 ```bash
-python prepare_dataset.py
+python scripts/prepare_dataset.py
 ```
 
 Preview the planned split without moving files:
 
 ```bash
-python prepare_dataset.py --dry-run
+python scripts/prepare_dataset.py --dry-run
 ```
 
 Use a custom ratio:
 
 ```bash
-python prepare_dataset.py --train 0.7 --val 0.2 --test 0.1
+python scripts/prepare_dataset.py --train 0.7 --val 0.2 --test 0.1
 ```
 
-After downloading a normal YOLO detection export from Roboflow, use `convert_roboflow_yolo_to_obb.py` to convert it into this project's OBB label format:
+After downloading a normal YOLO detection export from Roboflow, use `scripts/convert_roboflow_yolo_to_obb.py` to convert it into this project's OBB label format:
 
 ```bash
-python convert_roboflow_yolo_to_obb.py --source path/to/roboflow_dataset --output importedDataset --overwrite
+python scripts/convert_roboflow_yolo_to_obb.py --source path/to/roboflow_dataset --output importedDataset --overwrite
 ```
 
 The default class map supports Roboflow's `Bottle fill level` dataset:
@@ -499,40 +511,40 @@ three_quarters_level -> much
 If the downloaded dataset uses different class names, pass an explicit mapping:
 
 ```bash
-python convert_roboflow_yolo_to_obb.py --source path/to/roboflow_dataset --output importedDataset --class-map bottle=none level=mid --overwrite
+python scripts/convert_roboflow_yolo_to_obb.py --source path/to/roboflow_dataset --output importedDataset --class-map bottle=none level=mid --overwrite
 ```
 
 ### Segmented Classical ML Data
 
-`prepare_tree_segments.py` prepares data for classical machine-learning classifiers. By default it does not use any existing model; it reads YOLO OBB label polygons to build masks, keeps only the masked image region, then writes masked images and a `features.csv`
+`scripts/prepare_tree_segments.py` prepares data for classical machine-learning classifiers. By default it does not use any existing model; it reads YOLO OBB label polygons to build masks, keeps only the masked image region, then writes masked images and a `features.csv`
 
 ```bash
-python prepare_tree_segments.py --label-set labels_0123 --output runs/tree_segments --overwrite
+python scripts/prepare_tree_segments.py --label-set labels_0123 --output runs/tree_segments --overwrite
 ```
 
-`train_tree_classifier.py` connects segmentation preprocessing and classifier training, automatically generating and reading the same `features.csv`. The default algorithm remains `decision-tree`; use `--algorithm` to switch to other common machine-learning classifiers.
+`scripts/train_tree_classifier.py` connects segmentation preprocessing and classifier training, automatically generating and reading the same `features.csv`. The default algorithm remains `decision-tree`; use `--algorithm` to switch to other common machine-learning classifiers.
 
 ```bash
-python train_tree_classifier.py --label-set labels_0123 --segments-output runs/tree_segments_0123 --tree-output runs/tree_classifier_0123 --overwrite-segments --max-depth 5 --min-samples-leaf 3
+python scripts/train_tree_classifier.py --label-set labels_0123 --segments-output runs/tree_segments_0123 --tree-output runs/tree_classifier_0123 --overwrite-segments --max-depth 5 --min-samples-leaf 3
 ```
 
 If `features.csv` already exists, skip segmentation and train directly:
 
 ```bash
-python train_tree_classifier.py --features runs/tree_segments/features.csv --tree-output runs/tree_classifier --max-depth 5 --min-samples-leaf 3
+python scripts/train_tree_classifier.py --features runs/tree_segments/features.csv --tree-output runs/tree_classifier --max-depth 5 --min-samples-leaf 3
 ```
 
 Train a random forest or SVM:
 
 ```bash
-python train_tree_classifier.py --features runs/tree_segments/features.csv --tree-output runs/tree_classifier_rf --algorithm random-forest --n-estimators 300 --max-depth 8 --min-samples-leaf 2
-python train_tree_classifier.py --features runs/tree_segments/features.csv --tree-output runs/tree_classifier_svm --algorithm rbf-svm --svm-c 3.0 --svm-gamma scale
+python scripts/train_tree_classifier.py --features runs/tree_segments/features.csv --tree-output runs/tree_classifier_rf --algorithm random-forest --n-estimators 300 --max-depth 8 --min-samples-leaf 2
+python scripts/train_tree_classifier.py --features runs/tree_segments/features.csv --tree-output runs/tree_classifier_svm --algorithm rbf-svm --svm-c 3.0 --svm-gamma scale
 ```
 
 Train every supported classical ML algorithm and print the best validation accuracy at the end:
 
 ```bash
-python train_tree_classifier.py --features runs/tree_segments/features.csv --tree-output runs/tree_classifier_all --algorithm all --n-estimators 300 --max-depth 8 --min-samples-leaf 2 --neighbors 5 --svm-c 3.0 --svm-gamma scale --max-iter 3000
+python scripts/train_tree_classifier.py --features runs/tree_segments/features.csv --tree-output runs/tree_classifier_all --algorithm all --n-estimators 300 --max-depth 8 --min-samples-leaf 2 --neighbors 5 --svm-c 3.0 --svm-gamma scale --max-iter 3000
 ```
 
 Useful parameters:
@@ -556,7 +568,7 @@ Useful parameters:
 --no-progress disable tqdm progress bars
 ```
 
-The classifiers use interpretable features defined in `segment_features.py`:
+The classifiers use interpretable features defined in `scripts/segment_features.py`:
 
 ```text
 mask geometry: mask area ratio, bounding-box proportions, mask fill ratio, mask center
@@ -591,10 +603,10 @@ runs/tree_segments/
 
 `features.csv` records the masked image path, original label, mask geometry, color, band, and edge features, and can be reused directly by the classifiers above
 
-If automatic labeling is needed, only use weights trained earlier by this project through `train_obb.py`, for example:
+If automatic labeling is needed, only use weights trained earlier by this project through `scripts/train_obb.py`, for example:
 
 ```bash
-python train_tree_classifier.py --label-model runs/obb/bottle_01_yolo11m_640_b4/weights/best.pt --label-set labels_0123 --segments-output runs/tree_segments_0123_model_labeled --tree-output runs/tree_classifier_0123_model_labeled --overwrite-segments --max-depth 5 --min-samples-leaf 3
+python scripts/train_tree_classifier.py --label-model runs/obb/bottle_01_yolo11m_640_b4/weights/best.pt --label-set labels_0123 --segments-output runs/tree_segments_0123_model_labeled --tree-output runs/tree_classifier_0123_model_labeled --overwrite-segments --max-depth 5 --min-samples-leaf 3
 ```
 
 `--label-model` only accepts project-trained weights under `runs/obb/`; external model names such as `yolo11n-seg.pt` are not accepted
@@ -630,25 +642,25 @@ test      6     15
 Train the four-class model:
 
 ```bash
-python train_obb.py --model yolo11m-obb.pt --label-set labels_0123 --epochs 200 --imgsz 640 --batch 4 --device 0 --workers 2 --name bottle_0123_yolo11m_640_b4
+python scripts/train_obb.py --model yolo11m-obb.pt --label-set labels_0123 --epochs 200 --imgsz 640 --batch 4 --device 0 --workers 2 --name bottle_0123_yolo11m_640_b4
 ```
 
 Train the binary `none/exist` model:
 
 ```bash
-python train_obb.py --model yolo11m-obb.pt --label-set labels_01 --epochs 200 --imgsz 640 --batch 4 --device 0 --workers 2 --name bottle_01_yolo11m_640_b4
+python scripts/train_obb.py --model yolo11m-obb.pt --label-set labels_01 --epochs 200 --imgsz 640 --batch 4 --device 0 --workers 2 --name bottle_01_yolo11m_640_b4
 ```
 
 Train the single-class `bottle` model:
 
 ```bash
-python train_obb.py --model yolo11m-obb.pt --label-set label_bottle --epochs 200 --imgsz 640 --batch 4 --device 0 --workers 2 --name bottle_only_yolo11m_640_b4
+python scripts/train_obb.py --model yolo11m-obb.pt --label-set label_bottle --epochs 200 --imgsz 640 --batch 4 --device 0 --workers 2 --name bottle_only_yolo11m_640_b4
 ```
 
 Enable translation and rotation augmentation:
 
 ```bash
-python train_obb.py --model yolo11m-obb.pt --label-set label_bottle --epochs 200 --imgsz 640 --batch 4 --device 0 --workers 2 --name bottle_only_aug_yolo11m_640_b4 --augment-geom --degrees 10 --translate 0.1
+python scripts/train_obb.py --model yolo11m-obb.pt --label-set label_bottle --epochs 200 --imgsz 640 --batch 4 --device 0 --workers 2 --name bottle_only_aug_yolo11m_640_b4 --augment-geom --degrees 10 --translate 0.1
 ```
 
 `--label-set` accepts both long and short names:
@@ -682,9 +694,9 @@ Useful training parameters:
 Check which dataset yaml will be used without starting training:
 
 ```bash
-python train_obb.py --label-set labels_01 --prepare-data-only
-python train_obb.py --label-set labels_0123 --prepare-data-only
-python train_obb.py --label-set label_bottle --prepare-data-only
+python scripts/train_obb.py --label-set labels_01 --prepare-data-only
+python scripts/train_obb.py --label-set labels_0123 --prepare-data-only
+python scripts/train_obb.py --label-set label_bottle --prepare-data-only
 ```
 
 Do not pass `--data bottle_obb.yaml` when using `--label-set`, otherwise the script cannot switch between label sets

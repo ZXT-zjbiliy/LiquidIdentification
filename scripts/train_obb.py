@@ -8,7 +8,7 @@ import subprocess
 from convert_lcdtc_to_yolo_obb import convert_lcdtc_to_yolo_obb
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MODEL = ROOT / "yolo11m-obb.pt"
 DEFAULT_DATASET = ROOT / "bottleDataset"
 DEFAULT_VIEW_ROOT = ROOT / ".dataset_views"
@@ -203,7 +203,7 @@ def activate_label_set(dataset: Path, label_set: str):
     selected_labels = dataset / config["label_dir"]
     active_labels = dataset / "labels"
     if not selected_labels.exists():
-        raise FileNotFoundError(f"Label directory not found: {selected_labels}. Run prepare_dataset.py first.")
+        raise FileNotFoundError(f"Label directory not found: {selected_labels}. Run scripts/prepare_dataset.py first.")
 
     link_dir(selected_labels, active_labels)
 
