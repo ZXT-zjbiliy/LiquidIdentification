@@ -118,6 +118,32 @@ python scripts/convert_roboflow_yolo_to_obb.py --source path/to/roboflow_dataset
 
 ### 分割后传统机器学习数据
 
+新的传统机器学习主入口是 `scripts/train_classical_liquid_ml.py`。它整理自 `feature_tree_train/` 中的同学代码，去掉了硬编码路径，统一支持 LCDTC 大数据集、当前仓库的 `bottleDataset` 小数据集，以及可选的旧版 `labels_picture` 裁剪数据。
+
+```bash
+python scripts/train_classical_liquid_ml.py --sources lcdtc bottle-dataset --feature-set full --models all --tasks all --output runs/classical_liquid_ml --overwrite-features
+```
+
+只跑小数据集 0123：
+
+```bash
+python scripts/train_classical_liquid_ml.py --sources bottle-dataset --label-set labels_0123 --feature-set full --models decision-tree,random-forest,svm --tasks amount --output runs/classical_liquid_ml_small --overwrite-features
+```
+
+常用参数：
+
+```text
+--sources       数据来源：lcdtc、bottle-dataset、labels-picture
+--feature-set   特征集：light 或 full
+--models        传统模型：decision-tree、random-forest、gradient-boosting、knn、svm、xgboost，或 all
+--tasks         任务：binary、amount，或 all
+--top-k-features  使用随机森林筛选 Top-K 特征；0 表示关闭
+```
+
+`feature_tree_train/` 保留为旧实验脚本归档，文件名已经改成英文；后续正式实验优先使用 `scripts/train_classical_liquid_ml.py`。
+
+下面这套 `prepare_tree_segments.py` / `train_tree_classifier.py` 是原来的 mask 分割特征流程，仍可复现实验，但不再作为同学版传统机器学习代码的主入口。
+
 `scripts/prepare_tree_segments.py` 用于给后续传统机器学习分类器准备数据。默认不使用任何已有模型，而是直接读取 YOLO OBB 标签的四点框生成 mask，只保留 mask 内的图像区域，再保存分割后的图片和一份 `features.csv`
 
 ```bash
@@ -515,6 +541,32 @@ python scripts/convert_roboflow_yolo_to_obb.py --source path/to/roboflow_dataset
 ```
 
 ### Segmented Classical ML Data
+
+The maintained classical-ML entry point is now `scripts/train_classical_liquid_ml.py`. It is the cleaned replacement for the teammate scripts under `feature_tree_train/`: paths are configurable, file names are English, and one command can train binary and four-class classifiers on LCDTC, `bottleDataset`, or optional legacy `labels_picture` crops.
+
+```bash
+python scripts/train_classical_liquid_ml.py --sources lcdtc bottle-dataset --feature-set full --models all --tasks all --output runs/classical_liquid_ml --overwrite-features
+```
+
+Small-dataset 0123 only:
+
+```bash
+python scripts/train_classical_liquid_ml.py --sources bottle-dataset --label-set labels_0123 --feature-set full --models decision-tree,random-forest,svm --tasks amount --output runs/classical_liquid_ml_small --overwrite-features
+```
+
+Useful parameters:
+
+```text
+--sources       data sources: lcdtc, bottle-dataset, labels-picture
+--feature-set   feature set: light or full
+--models        classifiers: decision-tree, random-forest, gradient-boosting, knn, svm, xgboost, or all
+--tasks         task: binary, amount, or all
+--top-k-features keep the top K random-forest-ranked features; 0 disables selection
+```
+
+`feature_tree_train/` is kept as a legacy experiment archive. Use `scripts/train_classical_liquid_ml.py` for new runs.
+
+The older `prepare_tree_segments.py` / `train_tree_classifier.py` mask-feature workflow is still available for reproduction, but it is no longer the main entry point for the teammate classical-ML code.
 
 `scripts/prepare_tree_segments.py` prepares data for classical machine-learning classifiers. By default it does not use any existing model; it reads YOLO OBB label polygons to build masks, keeps only the masked image region, then writes masked images and a `features.csv`
 
